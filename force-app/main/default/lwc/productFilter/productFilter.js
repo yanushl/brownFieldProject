@@ -13,6 +13,8 @@ import PRODUCTS_FILTERED_MESSAGE from '@salesforce/messageChannel/ProductsFilter
 
 // The delay used when debouncing event handlers before firing the event
 const DELAY = 350;
+// Default record type ID used for all picklist value wire calls
+const DEFAULT_RECORD_TYPE_ID = '012000000000000AAA';
 
 /**
  * Displays a filter panel to search for Product__c[].
@@ -30,25 +32,25 @@ export default class ProductFilter extends LightningElement {
     messageContext;
 
     @wire(getPicklistValues, {
-        recordTypeId: '012000000000000AAA',
+        recordTypeId: DEFAULT_RECORD_TYPE_ID,
         fieldApiName: CATEGORY_FIELD
     })
     categories;
 
     @wire(getPicklistValues, {
-        recordTypeId: '012000000000000AAA',
+        recordTypeId: DEFAULT_RECORD_TYPE_ID,
         fieldApiName: LEVEL_FIELD
     })
     levels;
 
     @wire(getPicklistValues, {
-        recordTypeId: '012000000000000AAA',
+        recordTypeId: DEFAULT_RECORD_TYPE_ID,
         fieldApiName: MATERIAL_FIELD
     })
     materials;
 
     @wire(getPicklistValues, {
-        recordTypeId: '012000000000000AAA',
+        recordTypeId: DEFAULT_RECORD_TYPE_ID,
         fieldApiName: YEAR_FIELD
     })
     years;
@@ -66,6 +68,15 @@ export default class ProductFilter extends LightningElement {
 
     handleCheckboxChange(event) {
         if (!this.filters.categories) {
+            // Guard: all picklist wires must have resolved before lazy-init
+            if (
+                !this.categories?.data ||
+                !this.levels?.data ||
+                !this.materials?.data ||
+                !this.years?.data
+            ) {
+                return;
+            }
             // Lazy initialize filters with all values initially set
             this.filters.categories = this.categories.data.values.map(
                 (item) => item.value

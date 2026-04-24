@@ -17,7 +17,7 @@
                 ></lightning-slider>
             </section>
             <section>
-                <h1>Category</h1>
+                <h2>Category</h2>
                 <template lwc:if={categories.data}>
                     <template
                         for:each={categories.data.values}
@@ -43,7 +43,7 @@
                 </template>
             </section>
             <section>
-                <h1>Material</h1>
+                <h2>Material</h2>
                 <template lwc:if={materials.data}>
                     <template
                         for:each={materials.data.values}
@@ -69,7 +69,7 @@
                 </template>
             </section>
             <section>
-                <h1>Level</h1>
+                <h2>Level</h2>
                 <template lwc:if={levels.data}>
                     <template for:each={levels.data.values} for:item="level">
                         <lightning-input
@@ -92,7 +92,7 @@
                 </template>
             </section>
             <section>
-                <h1>Year</h1>
+                <h2>Year</h2>
                 <template lwc:if={years.data}>
                     <template for:each={years.data.values} for:item="year">
                         <lightning-input
