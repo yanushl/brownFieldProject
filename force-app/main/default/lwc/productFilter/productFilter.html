@@ -91,6 +91,29 @@
                     ></c-error-panel>
                 </template>
             </section>
+            <section>
+                <h1>Year</h1>
+                <template lwc:if={years.data}>
+                    <template for:each={years.data.values} for:item="year">
+                        <lightning-input
+                            key={year.value}
+                            label={year.label}
+                            data-filter="years"
+                            data-value={year.value}
+                            type="checkbox"
+                            checked
+                            onchange={handleCheckboxChange}
+                        ></lightning-input>
+                    </template>
+                </template>
+                <template lwc:if={years.error}>
+                    <c-error-panel
+                        type="inlineMessage"
+                        friendly-message="Error loading years"
+                        errors={years.error}
+                    ></c-error-panel>
+                </template>
+            </section>
         </div>
     </lightning-card>
 </template>

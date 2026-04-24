@@ -5,6 +5,7 @@ import { getPicklistValues } from 'lightning/uiObjectInfoApi';
 import CATEGORY_FIELD from '@salesforce/schema/Product__c.Category__c';
 import LEVEL_FIELD from '@salesforce/schema/Product__c.Level__c';
 import MATERIAL_FIELD from '@salesforce/schema/Product__c.Material__c';
+import YEAR_FIELD from '@salesforce/schema/Product__c.Year__c';
 
 // Lightning Message Service and a message channel
 import { publish, MessageContext } from 'lightning/messageService';
@@ -46,6 +47,12 @@ export default class ProductFilter extends LightningElement {
     })
     materials;
 
+    @wire(getPicklistValues, {
+        recordTypeId: '012000000000000AAA',
+        fieldApiName: YEAR_FIELD
+    })
+    years;
+
     handleSearchKeyChange(event) {
         this.filters.searchKey = event.target.value;
         this.delayedFireFilterChangeEvent();
@@ -67,6 +74,9 @@ export default class ProductFilter extends LightningElement {
                 (item) => item.value
             );
             this.filters.materials = this.materials.data.values.map(
+                (item) => item.value
+            );
+            this.filters.years = this.years.data.values.map(
                 (item) => item.value
             );
         }

@@ -106,6 +106,7 @@ describe('c-product-filter', () => {
                     categories: ['MockValue'],
                     levels: ['MockValue'],
                     materials: ['MockValue'],
+                    years: ['MockValue'],
                     maxPrice: 10000,
                     searchKey: ''
                 }
@@ -127,6 +128,10 @@ describe('c-product-filter', () => {
                 .then(() => {
                     expectedFilters.filters.levels = [];
                     verifyFilterToggle(element, 'levels', expectedFilters);
+                })
+                .then(() => {
+                    expectedFilters.filters.years = [];
+                    verifyFilterToggle(element, 'years', expectedFilters);
                 });
         });
 
@@ -158,12 +163,12 @@ describe('c-product-filter', () => {
             return Promise.resolve().then(() => {
                 const messages =
                     element.shadowRoot.querySelectorAll('c-error-panel');
-                // One error message per @wire
-                expect(messages).toHaveLength(3);
+                // One error message per @wire (categories, materials, levels, years)
+                expect(messages).toHaveLength(4);
             });
         });
 
-        it.each(['categories', 'materials', 'levels'])(
+        it.each(['categories', 'materials', 'levels', 'years'])(
             'does not render %s input options',
             (type) => {
                 const element = createElement('c-product-filter', {

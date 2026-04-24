@@ -19,6 +19,9 @@
                             maximum-fraction-digits="0"
                         ></lightning-formatted-number>
                     </p>
+                    <template lwc:if={year}>
+                        <p class="slds-align_absolute-center">Year: {year}</p>
+                    </template>
                 </div>
             </div>
         </a>

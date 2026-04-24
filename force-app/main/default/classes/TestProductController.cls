@@ -18,6 +18,7 @@ public class TestProductController {
                 Category__c = 'Mountain',
                 Level__c = 'Beginner',
                 Material__c = 'Carbon',
+                Year__c = '2024',
                 Product_Family__c = family.Id
             ),
             new Product__c(
@@ -44,6 +45,32 @@ public class TestProductController {
 
         Assert.areEqual(1, result.records.size());
         Assert.areEqual(PRODUCT_NAME1, ((Product__c) result.records[0]).Name);
+    }
+
+    @isTest
+    static void getProducts_yearFilter_returnsMatchingAndNullYear() {
+        ProductController.Filters filters = new ProductController.Filters();
+        filters.maxPrice = 9999;
+        filters.years = new List<String>{ '2024' };
+
+        PagedResult result = ProductController.getProducts(filters, 1);
+
+        // PRODUCT_NAME1 has Year__c = '2024'; PRODUCT_NAME2 has Year__c = null
+        // Both must be returned: year-matched + null-year products
+        Assert.areEqual(2, result.records.size());
+    }
+
+    @isTest
+    static void getProducts_yearFilter_excludesNonMatchingYear() {
+        ProductController.Filters filters = new ProductController.Filters();
+        filters.maxPrice = 9999;
+        filters.years = new List<String>{ '2020' };
+
+        PagedResult result = ProductController.getProducts(filters, 1);
+
+        // Only PRODUCT_NAME2 (null Year__c) should appear; PRODUCT_NAME1 has Year__c='2024' (no match)
+        Assert.areEqual(1, result.records.size());
+        Assert.areEqual(PRODUCT_NAME2, ((Product__c) result.records[0]).Name);
     }
 
     @isTest
