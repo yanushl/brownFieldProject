@@ -12,13 +12,19 @@ public with sharing class ProductController {
         public String[] materials { get; set; }
         @AuraEnabled
         public String[] levels { get; set; }
+        @AuraEnabled
+        public String[] years { get; set; }
     }
 
     @AuraEnabled(Cacheable=true scope='global')
     public static PagedResult getProducts(Filters filters, Integer pageNumber) {
         String key, whereClause = '';
         Decimal maxPrice;
-        String[] categories, materials, levels, criteria = new List<String>{};
+        String[] categories,
+            materials,
+            levels,
+            years,
+            criteria = new List<String>{};
         if (filters != null) {
             maxPrice = filters.maxPrice;
             materials = filters.materials;
@@ -43,6 +49,10 @@ public with sharing class ProductController {
                 materials = filters.materials;
                 criteria.add('Material__c IN :materials');
             }
+            if (filters.years != null) {
+                years = filters.years;
+                criteria.add('(Year__c IN :years OR Year__c = null)');
+            }
             if (criteria.size() > 0) {
                 whereClause = 'WHERE ' + String.join(criteria, ' AND ');
             }
@@ -56,7 +66,7 @@ public with sharing class ProductController {
             'SELECT count() FROM Product__c ' + whereClause
         );
         result.records = Database.query(
-            'SELECT Id, Name, MSRP__c, Description__c, Category__c, Level__c, Picture_URL__c, Material__c FROM Product__c ' +
+            'SELECT Id, Name, MSRP__c, Description__c, Category__c, Level__c, Picture_URL__c, Material__c, Year__c FROM Product__c ' +
                 whereClause +
                 ' WITH USER_MODE' +
                 ' ORDER BY Name LIMIT :pageSize OFFSET :offset'

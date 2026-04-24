@@ -71,4 +71,47 @@ describe('c-product-tile', () => {
 
         return Promise.resolve().then(() => expect(element).toBeAccessible());
     });
+
+    it('displays year when product has Year__c set', () => {
+        const element = createElement('c-product-tile', {
+            is: ProductTile
+        });
+        element.product = {
+            Id: 1,
+            Picture_URL__c: 'https://salesforce.com',
+            Name: 'Foo',
+            MSRP__c: 1000,
+            Year__c: '2024'
+        };
+        document.body.appendChild(element);
+
+        return Promise.resolve().then(() => {
+            const paragraphs = element.shadowRoot.querySelectorAll('p');
+            const yearParagraph = Array.from(paragraphs).find((p) =>
+                p.textContent.includes('Year: 2024')
+            );
+            expect(yearParagraph).not.toBeNull();
+        });
+    });
+
+    it('does not display year element when product has no Year__c', () => {
+        const element = createElement('c-product-tile', {
+            is: ProductTile
+        });
+        element.product = {
+            Id: 1,
+            Picture_URL__c: 'https://salesforce.com',
+            Name: 'Foo',
+            MSRP__c: 1000
+        };
+        document.body.appendChild(element);
+
+        return Promise.resolve().then(() => {
+            const paragraphs = element.shadowRoot.querySelectorAll('p');
+            const yearParagraph = Array.from(paragraphs).find((p) =>
+                p.textContent.includes('Year:')
+            );
+            expect(yearParagraph).toBeUndefined();
+        });
+    });
 });

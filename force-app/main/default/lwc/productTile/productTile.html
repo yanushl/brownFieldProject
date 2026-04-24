@@ -5,7 +5,7 @@
                 <img
                     src={pictureUrl}
                     class="product slds-align_absolute-center"
-                    alt="Product picture"
+                    alt={name}
                 />
                 <div>
                     <p class="title slds-align_absolute-center">{name}</p>
@@ -19,6 +19,9 @@
                             maximum-fraction-digits="0"
                         ></lightning-formatted-number>
                     </p>
+                    <template lwc:if={year}>
+                        <p class="slds-align_absolute-center">Year: {year}</p>
+                    </template>
                 </div>
             </div>
         </a>

@@ -15,16 +15,19 @@ export default class ProductTile extends LightningElement {
         return this._product;
     }
     set product(value) {
+        if (!value) return;
         this._product = value;
         this.pictureUrl = value.Picture_URL__c;
         this.name = value.Name;
         this.msrp = value.MSRP__c;
+        this.year = value.Year__c;
     }
 
     /** Product__c field values to display. */
     pictureUrl;
     name;
     msrp;
+    year;
 
     handleClick() {
         const selectedEvent = new CustomEvent('selected', {

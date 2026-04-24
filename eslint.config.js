@@ -8,6 +8,17 @@ const salesforceLwcConfig = require('@salesforce/eslint-config-lwc/recommended')
 const globals = require('globals');
 
 module.exports = defineConfig([
+    // Global ignores for non-source directories
+    {
+        ignores: [
+            '.claude/**',
+            '.sf/**',
+            'salesforceaidevframework/**',
+            'salesforceaiinitframework/**',
+            'node_modules/**'
+        ]
+    },
+
     // LWC configuration for force-app/main/default/lwc
     {
         files: ['force-app/main/default/lwc/**/*.js'],
