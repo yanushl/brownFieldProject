@@ -15,6 +15,7 @@ export default class ProductTile extends LightningElement {
         return this._product;
     }
     set product(value) {
+        if (!value) return;
         this._product = value;
         this.pictureUrl = value.Picture_URL__c;
         this.name = value.Name;
