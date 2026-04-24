@@ -1,0 +1,142 @@
+# Bitbucket Pipelines - Salesforce CI/CD Pipeline Template
+# Place in: bitbucket-pipelines.yml
+
+image: node:18
+
+definitions:
+  caches:
+    sf-cli: ~/.local/share/sf
+  
+  steps:
+    - step: &install-cli
+        name: Install Salesforce CLI
+        script:
+          - npm install -g @salesforce/cli
+          - sf version
+        caches:
+          - sf-cli
+
+    - step: &authenticate
+        name: Authenticate to Salesforce
+        script:
+          - npm install -g @salesforce/cli
+          - echo "$SFDX_AUTH_URL" > auth.txt
+          - sf org login sfdx-url --sfdx-url-file auth.txt --alias target-org
+          - rm auth.txt
+
+pipelines:
+  # ==================================================
+  # PULL REQUEST PIPELINE
+  # ==================================================
+  pull-requests:
+    '**':
+      - step:
+          name: Validate Deployment
+          script:
+            - npm install -g @salesforce/cli
+            - echo "$SFDX_AUTH_URL" > auth.txt
+            - sf org login sfdx-url --sfdx-url-file auth.txt --alias target-org
+            - rm auth.txt
+            - sf project deploy start --target-org target-org --dry-run --test-level RunLocalTests --wait 30
+          caches:
+            - sf-cli
+
+      - step:
+          name: Code Scan
+          script:
+            - npm install -g @salesforce/cli
+            - sf plugins install @salesforce/sfdx-scanner
+            - sf scanner run --target "force-app" --format table --severity-threshold 2
+          caches:
+            - sf-cli
+
+  # ==================================================
+  # BRANCH PIPELINES
+  # ==================================================
+  branches:
+    develop:
+      - step:
+          name: Run Tests
+          script:
+            - npm install -g @salesforce/cli
+            - echo "$SFDX_AUTH_URL" > auth.txt
+            - sf org login sfdx-url --sfdx-url-file auth.txt --alias target-org
+            - rm auth.txt
+            - sf apex run test --target-org target-org --test-level RunLocalTests --code-coverage --wait 30
+          caches:
+            - sf-cli
+
+      - step:
+          name: Deploy to Staging
+          deployment: staging
+          trigger: manual
+          script:
+            - npm install -g @salesforce/cli
+            - echo "$SFDX_AUTH_URL_STAGING" > auth.txt
+            - sf org login sfdx-url --sfdx-url-file auth.txt --alias staging-org
+            - rm auth.txt
+            - sf project deploy start --target-org staging-org --test-level RunLocalTests --wait 60
+          caches:
+            - sf-cli
+
+    main:
+      - step:
+          name: Run Tests
+          script:
+            - npm install -g @salesforce/cli
+            - echo "$SFDX_AUTH_URL" > auth.txt
+            - sf org login sfdx-url --sfdx-url-file auth.txt --alias target-org
+            - rm auth.txt
+            - sf apex run test --target-org target-org --test-level RunLocalTests --code-coverage --wait 30
+          caches:
+            - sf-cli
+
+      - step:
+          name: Deploy to Production
+          deployment: production
+          trigger: manual
+          script:
+            - npm install -g @salesforce/cli
+            - echo "$SFDX_AUTH_URL_PROD" > auth.txt
+            - sf org login sfdx-url --sfdx-url-file auth.txt --alias prod-org
+            - rm auth.txt
+            - sf project deploy start --target-org prod-org --test-level RunLocalTests --wait 60
+          caches:
+            - sf-cli
+
+  # ==================================================
+  # CUSTOM PIPELINES (Can be triggered manually)
+  # ==================================================
+  custom:
+    delta-deploy:
+      - step:
+          name: Delta Deploy
+          script:
+            - npm install -g @salesforce/cli
+            - sf plugins install sfdx-git-delta
+            - echo "$SFDX_AUTH_URL" > auth.txt
+            - sf org login sfdx-url --sfdx-url-file auth.txt --alias target-org
+            - rm auth.txt
+            - sf sgd source delta --from "origin/main" --to "HEAD" --output "delta" --generate-delta
+            - |
+              if [ -f delta/package/package.xml ]; then
+                sf project deploy start --target-org target-org --manifest delta/package/package.xml --wait 30
+              else
+                echo "No changes to deploy"
+              fi
+          artifacts:
+            - delta/**
+          caches:
+            - sf-cli
+
+    full-scan:
+      - step:
+          name: Full Code Scan
+          script:
+            - npm install -g @salesforce/cli
+            - sf plugins install @salesforce/sfdx-scanner
+            - sf scanner run --target "force-app" --format html --outfile scanner-report.html
+          artifacts:
+            - scanner-report.html
+          caches:
+            - sf-cli

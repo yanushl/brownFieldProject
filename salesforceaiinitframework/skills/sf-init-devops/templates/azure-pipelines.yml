@@ -1,0 +1,235 @@
+# Azure DevOps - Salesforce CI/CD Pipeline Template
+# Place in: azure-pipelines.yml
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+      - release/*
+  paths:
+    include:
+      - force-app/**
+      - sfdx-project.json
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - force-app/**
+
+variables:
+  - name: SF_CLI_VERSION
+    value: 'latest'
+  - name: NODE_VERSION
+    value: '18.x'
+
+# ==================================================
+# STAGES
+# ==================================================
+stages:
+  - stage: Validate
+    displayName: 'Validate Deployment'
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+    jobs:
+      - job: ValidateJob
+        displayName: 'Validate and Scan'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: NodeTool@0
+            displayName: 'Install Node.js'
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          - script: npm install -g @salesforce/cli
+            displayName: 'Install Salesforce CLI'
+
+          - script: sf version
+            displayName: 'Verify CLI Installation'
+
+          - script: |
+              echo "$(SFDX_AUTH_URL)" > auth.txt
+              sf org login sfdx-url --sfdx-url-file auth.txt --alias target-org
+              rm auth.txt
+            displayName: 'Authenticate to Salesforce'
+            env:
+              SFDX_AUTH_URL: $(SFDX_AUTH_URL)
+
+          - script: |
+              sf project deploy start \
+                --target-org target-org \
+                --dry-run \
+                --test-level RunLocalTests \
+                --wait 30
+            displayName: 'Validate Deployment'
+
+          - script: |
+              sf plugins install @salesforce/sfdx-scanner
+              sf scanner run --target "force-app" --format sarif --outfile $(Build.ArtifactStagingDirectory)/scanner-results.sarif
+            displayName: 'Run Code Scanner'
+            continueOnError: true
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Scanner Results'
+            inputs:
+              pathtoPublish: '$(Build.ArtifactStagingDirectory)/scanner-results.sarif'
+              artifactName: 'CodeScanResults'
+
+  - stage: Test
+    displayName: 'Run Tests'
+    dependsOn: []
+    condition: always()
+    jobs:
+      - job: ApexTests
+        displayName: 'Run Apex Tests'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+
+          - task: NodeTool@0
+            displayName: 'Install Node.js'
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          - script: npm install -g @salesforce/cli
+            displayName: 'Install Salesforce CLI'
+
+          - script: |
+              echo "$(SFDX_AUTH_URL)" > auth.txt
+              sf org login sfdx-url --sfdx-url-file auth.txt --alias target-org
+              rm auth.txt
+            displayName: 'Authenticate to Salesforce'
+            env:
+              SFDX_AUTH_URL: $(SFDX_AUTH_URL)
+
+          - script: |
+              sf apex run test \
+                --target-org target-org \
+                --test-level RunLocalTests \
+                --code-coverage \
+                --result-format junit \
+                --output-dir $(Build.ArtifactStagingDirectory)/test-results \
+                --wait 30
+            displayName: 'Run Apex Tests'
+
+          - task: PublishTestResults@2
+            displayName: 'Publish Test Results'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(Build.ArtifactStagingDirectory)/test-results/*.xml'
+              failTaskOnFailedTests: true
+
+      - job: LWCTests
+        displayName: 'Run LWC Jest Tests'
+        pool:
+          vmImage: 'ubuntu-latest'
+        condition: |
+          or(
+            contains(variables['Build.SourceVersionMessage'], 'lwc'),
+            eq(variables['Build.SourceBranch'], 'refs/heads/main')
+          )
+        steps:
+          - checkout: self
+
+          - task: NodeTool@0
+            displayName: 'Install Node.js'
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          - script: npm ci
+            displayName: 'Install Dependencies'
+
+          - script: npm run test:unit:coverage
+            displayName: 'Run LWC Tests'
+
+          - task: PublishCodeCoverageResults@1
+            displayName: 'Publish Coverage'
+            inputs:
+              codeCoverageTool: 'Cobertura'
+              summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage/cobertura-coverage.xml'
+
+  - stage: DeployStaging
+    displayName: 'Deploy to Staging'
+    dependsOn: Test
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+    jobs:
+      - deployment: DeployStagingJob
+        displayName: 'Deploy to Staging Environment'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: 'staging'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: NodeTool@0
+                  displayName: 'Install Node.js'
+                  inputs:
+                    versionSpec: $(NODE_VERSION)
+
+                - script: npm install -g @salesforce/cli
+                  displayName: 'Install Salesforce CLI'
+
+                - script: |
+                    echo "$(SFDX_AUTH_URL_STAGING)" > auth.txt
+                    sf org login sfdx-url --sfdx-url-file auth.txt --alias staging-org
+                    rm auth.txt
+                  displayName: 'Authenticate to Staging'
+                  env:
+                    SFDX_AUTH_URL_STAGING: $(SFDX_AUTH_URL_STAGING)
+
+                - script: |
+                    sf project deploy start \
+                      --target-org staging-org \
+                      --test-level RunLocalTests \
+                      --wait 60
+                  displayName: 'Deploy to Staging'
+
+  - stage: DeployProduction
+    displayName: 'Deploy to Production'
+    dependsOn: Test
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployProductionJob
+        displayName: 'Deploy to Production Environment'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: NodeTool@0
+                  displayName: 'Install Node.js'
+                  inputs:
+                    versionSpec: $(NODE_VERSION)
+
+                - script: npm install -g @salesforce/cli
+                  displayName: 'Install Salesforce CLI'
+
+                - script: |
+                    echo "$(SFDX_AUTH_URL_PROD)" > auth.txt
+                    sf org login sfdx-url --sfdx-url-file auth.txt --alias prod-org
+                    rm auth.txt
+                  displayName: 'Authenticate to Production'
+                  env:
+                    SFDX_AUTH_URL_PROD: $(SFDX_AUTH_URL_PROD)
+
+                - script: |
+                    sf project deploy start \
+                      --target-org prod-org \
+                      --test-level RunLocalTests \
+                      --wait 60
+                  displayName: 'Deploy to Production'

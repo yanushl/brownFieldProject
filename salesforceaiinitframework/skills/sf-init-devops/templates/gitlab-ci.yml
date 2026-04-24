@@ -1,0 +1,156 @@
+# GitLab CI - Salesforce CI/CD Pipeline Template
+# Place in: .gitlab-ci.yml
+
+image: salesforce/cli:latest
+
+stages:
+  - validate
+  - test
+  - deploy-staging
+  - deploy-production
+
+variables:
+  GIT_DEPTH: 0  # Required for delta detection
+  SF_AUTOUPDATE_DISABLE: "true"
+
+# ==================================================
+# AUTHENTICATION TEMPLATE
+# ==================================================
+.authenticate_template: &authenticate
+  before_script:
+    - echo "Authenticating to Salesforce..."
+    - echo "$SFDX_AUTH_URL" > auth.txt
+    - sf org login sfdx-url --sfdx-url-file auth.txt --alias target-org
+    - rm auth.txt
+
+.authenticate_prod_template: &authenticate_prod
+  before_script:
+    - echo "Authenticating to Production..."
+    - echo "$SFDX_AUTH_URL_PROD" > auth.txt
+    - sf org login sfdx-url --sfdx-url-file auth.txt --alias prod-org
+    - rm auth.txt
+
+# ==================================================
+# VALIDATION STAGE
+# ==================================================
+validate:
+  stage: validate
+  <<: *authenticate
+  script:
+    - echo "Validating deployment..."
+    - sf project deploy start --target-org target-org --dry-run --wait 30
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+  artifacts:
+    reports:
+      junit: test-results.xml
+    when: always
+
+code-scan:
+  stage: validate
+  script:
+    - sf plugins install @salesforce/sfdx-scanner
+    - sf scanner run --target "force-app" --format csv --outfile scanner-results.csv --severity-threshold 2
+  artifacts:
+    paths:
+      - scanner-results.csv
+    when: always
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# ==================================================
+# TEST STAGE
+# ==================================================
+apex-tests:
+  stage: test
+  <<: *authenticate
+  script:
+    - echo "Running Apex tests..."
+    - sf apex run test --target-org target-org --test-level RunLocalTests --code-coverage --wait 30 --result-format json > test-results.json
+    - |
+      # Check coverage threshold
+      COVERAGE=$(cat test-results.json | jq '.result.summary.orgWideCoverage' | tr -d '"' | tr -d '%')
+      if [ "$COVERAGE" -lt 75 ]; then
+        echo "Code coverage $COVERAGE% is below 75% threshold"
+        exit 1
+      fi
+  artifacts:
+    paths:
+      - test-results.json
+    when: always
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+lwc-tests:
+  stage: test
+  image: node:18
+  script:
+    - npm ci
+    - npm run test:unit:coverage
+  coverage: /All files[^|]*\|[^|]*\s+([\d\.]+)/
+  artifacts:
+    paths:
+      - coverage/
+    when: always
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes:
+        - "force-app/**/lwc/**/*"
+
+# ==================================================
+# DEPLOY STAGING STAGE
+# ==================================================
+deploy-staging:
+  stage: deploy-staging
+  <<: *authenticate
+  script:
+    - echo "Deploying to Staging..."
+    - sf project deploy start --target-org target-org --test-level RunLocalTests --wait 60
+  environment:
+    name: staging
+    url: https://$SF_STAGING_DOMAIN.lightning.force.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+
+# ==================================================
+# DEPLOY PRODUCTION STAGE
+# ==================================================
+deploy-production:
+  stage: deploy-production
+  <<: *authenticate_prod
+  script:
+    - echo "Deploying to Production..."
+    - sf project deploy start --target-org prod-org --test-level RunLocalTests --wait 60
+  environment:
+    name: production
+    url: https://$SF_PROD_DOMAIN.lightning.force.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  only:
+    - main
+
+# ==================================================
+# DELTA DEPLOYMENT (Optional)
+# ==================================================
+delta-deploy:
+  stage: deploy-staging
+  <<: *authenticate
+  script:
+    - sf plugins install sfdx-git-delta
+    - sf sgd source delta --from "origin/main" --to "HEAD" --output "delta" --generate-delta
+    - |
+      if [ -f delta/package/package.xml ]; then
+        sf project deploy start --target-org target-org --manifest delta/package/package.xml --wait 30
+      else
+        echo "No changes to deploy"
+      fi
+  artifacts:
+    paths:
+      - delta/
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
